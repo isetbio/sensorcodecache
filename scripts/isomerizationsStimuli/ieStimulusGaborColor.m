@@ -5,13 +5,12 @@ function iStim = ieStimulusGaborColor(varargin)
 % Inputs: a structure that defines the parameters of the bar stimulus.
 % 
 % Outputs: iStim is a structure that contains the display, the scene, the
-%   optical image and the sensor.
+%   optical image and the mosaic.
 % 
 % Example:
 %   clear params; params.barWidth = 10; params.fov=0.6;
 %   iStim = ieStimulusBar(params);
 %   coneImageActivity(iStim.absorptions,'dFlag',true);
-%   vcAddObject(iStim.absorptions); sensorWindow;
 % 
 % 3/2016 JRG (c) isetbio team
 
@@ -58,11 +57,6 @@ end
 % Create display
 display = displayCreate(params.display);
 
-% Set up scene, oi and sensor
-% scene = sceneCreate();
-% scene = sceneSet(scene, 'h fov', fov);
-% vcAddObject(scene); sceneWindow;
-
 %% Initialize scene as a Gabor image
 
 % This is the contrast at each step in the simulation.  It ramps up
@@ -71,38 +65,35 @@ display = displayCreate(params.display);
 timeContrast = ones(params.nSteps,1);
 
 % We build a dummy scene here just so we can subsequently calculate
-% the sensor size.  But this scene itself is not used.  Rather we
+% the mosaic size.  But this scene itself is not used.  Rather we
 % build a series of scenes below.
 stimulusRGBdata = imageHarmonicColor(params); % sceneCreateGabor(params);
 scene = sceneFromFile(stimulusRGBdata, 'rgb', params.meanLuminance, display);
 scene = sceneSet(scene, 'h fov', fov);
-
 % vcAddObject(scene); sceneWindow;
 
-%% Initialize the optics and the sensor
+%% Initialize the optics and the mosaic
 oi  = oiCreate('wvf human');
-% absorptions = sensorCreate('human');
-% absorptions = sensorSetSizeToFOV(absorptions, fov, scene, oi);
-% 
-% absorptions = sensorSet(absorptions, 'exp time', params.expTime); 
-% absorptions = sensorSet(absorptions, 'time interval', params.timeInterval); 
 
-% compute cone packing density
+% Compute cone packing density
+% 
+% coneSz is avg cone size with gap in meters
 fLength = oiGet(oi, 'focal length');
 eccMM = 2 * tand(params.radius/2) * fLength * 1e3;
 coneD = coneDensity(eccMM, [params.radius params.theta], params.side);
-coneSz = sqrt(1./coneD) * 1e-3;  % avg cone size with gap in meters
+coneSz = sqrt(1./coneD) * 1e-3;  
 
+% Create mosaic object
 cm = coneMosaic;
-cm.pigment.width = coneSz(1); cm.pigment.height = coneSz(2);
+cm.pigment.width = coneSz; cm.pigment.height = coneSz;
 
-% set size to field of view
-sceneFOV = [sceneGet(scene, 'h fov') sceneGet(scene, 'v fov')];
-sceneDist = sceneGet(scene, 'distance');
-cm.setSizeToFOV(sceneFOV, 'sceneDist', sceneDist, 'focalLength', fLength);
+% Set size to field of view
+sceneFOV = [sceneGet(scene,'h fov') sceneGet(scene,'v fov')];
+sceneDist = sceneGet(scene,'distance');
+cm.setSizeToFOV(sceneFOV,'sceneDist', sceneDist,'focalLength', fLength);
 
 %% Compute a dynamic set of cone absorptions for moving bar
-fprintf('Computing cone isomerizations:    \n');
+fprintf('Computing cone isomerizations:\n');
 
 % Loop through frames to build movie
 absorptions = zeros([cm.mosaicSize nSteps]);
@@ -120,8 +111,7 @@ for t = 1 : nSteps
     
     % The mean scene luminance is set to 200 cd/m2, based on the
     % calibration of the monitor
-    scene = sceneAdjustLuminance(scene, 200);
-    
+    scene = sceneAdjustLuminance(scene, 200); 
     if t ==1
         sceneRGB = zeros([sceneGet(scene, 'size'), nSteps, 3]);
     end
@@ -136,11 +126,10 @@ for t = 1 : nSteps
     absorptions(:,:,t) = cm.compute(oi, 'currentFlag', false);
 end
 
-% Set the stimuls into the sensor object
-cm.emPositions = zeros(nSteps, 2);
-cm.absorptions = absorptions;
-
-cm.compute(oi, 'currentFlag', true);
+% Set the stimulus into the mosaic object and compute current
+% cm.emPositions = zeros(nSteps, 2);
+% cm.absorptions = absorptions;
+% cm.compute(oi, 'currentFlag', true);
 
 % These are both the results and the objects needed to recreate this
 % script. So calling isomerizationBar(iStim) should produce the same
